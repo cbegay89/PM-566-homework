@@ -1,0 +1,248 @@
+---
+title: "Assignment 4"
+author: Cynthia Begay 
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, eval=TRUE}
+a = matrix(1, 4, 5)
+
+# Total row sums
+fun1 <- function(mat) {
+  n <- nrow(mat)
+  ans <- double(n)
+  for (i in 1:n) {
+    ans[i] <- sum(mat[i, ])
+  }
+  ans
+}
+
+fun1alt <- function(mat) {
+  x = rowSums(mat, na.rm = TRUE)
+  #x = apply(mat, 1, sum)
+  x
+}
+```
+
+```{r problem 1, eval=FALSE}
+fun1alt(dat)
+fun1(dat)
+```
+
+```{r}
+# Cumulative product by row
+fun2 <- function(mat) {
+  n <- nrow(mat)
+  k <- ncol(mat)
+  ans <- mat
+  for (i in 1:n) {
+    for (j in 2:k)
+      ans[i,j] <- mat[i, j] + ans[i, j - 1]
+    }
+  ans
+ }
+
+
+fun2alt <- function(mat) {
+  x = apply(mat, 1, FUN = cumsum)
+  t(x)
+}
+```
+
+```{r}
+# Use the data with this code
+set.seed(2315)
+dat <- matrix(rnorm(200 * 100), nrow = 200)
+
+# Test for the first
+microbenchmark::microbenchmark(
+  fun1(dat),
+  fun1alt(dat), unit = "relative", check = "equivalent"
+)
+
+# Test for the second
+microbenchmark::microbenchmark(
+  fun2(dat),
+  fun2alt(dat), unit = "relative", check = "equivalent"
+)
+```
+
+
+```{r problem 2, eval = TRUE}
+sim_pi <- function(n = 1000, i = NULL) {
+  p <- matrix(runif(n*2), ncol = 2)
+  mean(rowSums(p^2) < 1) * 4
+}
+
+# Here is an example of the run
+set.seed(156)
+sim_pi(1000) # 3.132
+```
+
+```{r}
+# This runs the simulation a 4,000 times, each with 10,000 points
+set.seed(1231)
+system.time({
+  ans <- unlist(lapply(1:4000, sim_pi, n = 10000))
+  print(mean(ans))
+})
+```
+
+```{r}
+
+library(parallel)
+cl <- makePSOCKcluster(4L)
+clusterSetRNGStream(cl, 1231) #Equivalent to set.seed(1231)
+
+system.time({
+  ans <- unlist(parLapply(
+    cl = cl,
+    1:4000,
+    sim_pi,
+    n=10000
+  ))
+  
+  parallel::stopCluster(cl)
+  
+  print(mean(ans))
+})
+```
+
+```{r}
+#### Part 2: SQL #####
+#install.packages(c("RSQLite", "DBI"))
+library(RSQLite)
+library(DBI)
+
+# Initialize a temporary in memory database
+con <- dbConnect(SQLite(), ":memory:")
+
+# Download tables
+film <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/film.csv")
+film_category <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/film_category.csv")
+category <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/category.csv")
+
+# Copy data.frames to database
+dbWriteTable(con, "film", film)
+dbWriteTable(con, "film_category", film_category)
+dbWriteTable(con, "category", category)
+```
+
+```{sql, connection=con}
+PRAGMA table_info(film)
+```
+```{sql, connection=con}
+PRAGMA table_info(film_category)
+```
+
+```{sql, connection=con}
+PRAGMA table_info(category)
+```
+Question 1: How many movies are there available in each rating category? 
+```{sql, connection=con}
+SELECT film_id, title, rating
+FROM film
+ORDER by rating
+```
+There are 1000 observations with an associated rating.
+
+```{sql, connection=con}
+SELECT film_id, title, rating
+FROM film
+WHERE rating IN ('G')
+```
+There are 180 movies with a G rating. 
+
+```{sql, connection=con}
+SELECT film_id, title, rating
+FROM film
+WHERE rating IN ('PG')
+```
+There are 194 movies with a PG rating. 
+
+```{sql, connection=con}
+SELECT film_id, title, rating
+FROM film
+WHERE rating IN ('PG-13')
+```
+There are 223 movies with a PG-13 rating. 
+
+```{sql, connection=con}
+SELECT film_id, title, rating
+FROM film
+WHERE rating IN ('R')
+```
+There are 195 movies with an R rating. 
+
+```{sql, connection=con}
+SELECT film_id, title, rating
+FROM film
+WHERE rating IN ('NC-17')
+```
+There are 210 movies with an NC-17 rating.
+
+Question 2: What is the average replacement cost and rental rate for each rating category.
+
+```{sql, connection=con}
+SELECT rating,
+       AVG(rental_rate) AS avg_rate,
+       AVG(replacement_cost) AS avg_replace
+FROM film
+GROUP BY rating
+```
+
+The average rental rates and average replacement costs by ratings are: 
+Rated G, average rental rate = $2.91, average replacement cost = $20.12
+Rated PG, average rental rate = $3.05, average replacement cost = $18.96
+Rated PG-13, average rental rate = $3.03, average replacement cost = $20.40
+Rated R, average rental rate = $2.93, average replacement cost = $20.23
+Rated NC-17, average rental rate = $2.97, average replacement cost = $20.14
+
+
+Question 3: Use table film_category together with film to find the how many films there are within each category ID
+
+```{sql, connection=con}
+SELECT film.film_id, film_category.category_id
+  FROM film
+  INNER JOIN film_category ON film.film_id = film_category.film_id
+  GROUP BY category_id;
+```
+There are 16 categories total. The number of films per category are: 
+Category 1: 19
+Category 2: 18
+Category 3: 48
+Category 4: 14
+Category 5: 7
+Category 6: 1
+Category 7: 33
+Category 8: 5
+Category 9: 6
+Category 10: 46
+Category 11: 2
+Category 12: 12
+Category 13: 22
+Category 14: 26
+Category 15: 10
+Category 16: 41
+
+Question 4: 
+Incorporate table category into the answer to the previous question to find the name of the most popular category.
+```{sql, connection=con}
+SELECT film.film_id, film_category.category_id, category.name
+  FROM ((film
+  INNER JOIN film_category ON film.film_id = film_category.film_id)
+  INNER JOIN category ON film_category.category_id = category.category_id)
+  GROUP BY name;
+```
+The most popular category is catgory 3 "Children" with 48 movies. 
+
+
+
+
+
+
+
